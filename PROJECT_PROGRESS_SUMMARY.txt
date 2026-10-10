@@ -1,0 +1,295 @@
+================================================================================
+ENVIROWATCH (ZEUS) - COMPREHENSIVE PROJECT PROGRESS & TECHNICAL ARCHITECTURE REPORT
+================================================================================
+Project Name       : EnviroWatch (Internal Codename: Zeus)
+Target Area        : Delhi Technological University (DTU, Rohini) & North West Delhi
+Document Type      : Technical Progress Summary & Architecture Overview
+Generated At       : October 2026
+Version            : 1.2.0 (Phone Authentication & Live Monitoring Pipeline Release)
+Status             : Operational / Fully Functional / Production Ready
+================================================================================
+
+1. EXECUTIVE OVERVIEW
+--------------------------------------------------------------------------------
+EnviroWatch is a full-stack hyperlocal environmental monitoring and citizen
+science platform engineered specifically for the campus of Delhi Technological
+University (DTU) and its surrounding North West Delhi urban corridors (Shahbad
+Daulatpur, Bawana Road, Samaypur Badli).
+
+The system continuously tracks, evaluates, and publishes real-time metrics for:
+  * Air Quality Index (AQI) - Particulate matter, gaseous pollutants (CPCB scale)
+  * Ambient Temperature & Heat Wave Stress (Celsius, IMD advisory thresholds)
+  * Urban Flooding & Waterlogging Risk (Precipitation probability, 24h accumulation,
+    and citizen ground-truth corroboration)
+
+Residents, students, and faculty can inspect live station data on an interactive
+satellite map, review open environmental alerts/breaches, and submit verified
+community survey reports.
+
+--------------------------------------------------------------------------------
+2. SYSTEM ARCHITECTURE & TECHNOLOGY STACK
+--------------------------------------------------------------------------------
+
+2.1 Frontend Architecture
+  * Framework      : React 19.0.1 (Single Page Application with Vite 8.3)
+  * Language       : TypeScript 7.0.2 with strict type checking (zero lint/compile errors)
+  * Styling        : Tailwind CSS v4.3 with custom dark/light theme support
+  * Mapping        : @vis.gl/react-google-maps (Official Google Maps Web Components for React)
+  * Iconography    : Lucide React (feather-style crisp vector icons)
+  * State Handling : Functional React hooks (useState, useEffect, custom context-ready patterns)
+  * Geolocation    : HTML5 Geolocation API with graceful fallback to station selection
+
+2.2 Backend Architecture
+  * Runtime        : Node.js with tsx executing ES Module pipeline
+  * Web Server     : Express 4.21 with Vite middleware mounted in development
+  * Monitoring Loop: Scheduled background timer executing pipeline intervals
+                     (configurable via MONITORING_INTERVAL_MINUTES, default: 60 mins)
+  * Fail-Safe Mode : Dual-layer persistence: Supabase PostgreSQL + local JSON cache
+                     (data/pipeline_state.json) for 100% continuous uptime during
+                     network or external service blips.
+
+2.3 External Cloud APIs & Services
+  * Google Maps Platform JavaScript API (Dynamic satellite and road layers)
+  * Google Air Quality API (Air quality conditions, CPCB & Universal AQI calculations)
+  * Google Weather API (Live ambient temperature, precipitation probability, rain history)
+  * Supabase (PostgreSQL 15, Supabase Auth, Row Level Security, Storage)
+
+--------------------------------------------------------------------------------
+3. DATABASE SCHEMA & SECURITY SPECIFICATIONS
+--------------------------------------------------------------------------------
+The database is hosted on Supabase (PostgreSQL) with strict custom Enums,
+referential integrity, foreign key cascades, and Row-Level Security (RLS).
+
+3.1 Custom Enumerations (Enums)
+  * zone_metric : ('aqi', 'temperature', 'flooding')
+  * severity    : ('green', 'yellow', 'red')
+  * event_state : ('open', 'closed')
+  * survey_kind : ('air', 'flood')
+
+3.2 Database Tables
+  * public.zones
+    - zone_id    : TEXT PRIMARY KEY (e.g., 'zone-academic', 'zone-hostels')
+    - name       : TEXT NOT NULL (Human-readable zone label)
+    - center_lat : DOUBLE PRECISION NOT NULL (Latitude coordinate)
+    - center_lng : DOUBLE PRECISION NOT NULL (Longitude coordinate)
+
+  * public.zone_status
+    - zone_id    : TEXT NOT NULL REFERENCES public.zones(zone_id) ON DELETE CASCADE
+    - type       : zone_metric NOT NULL ('aqi' | 'temperature' | 'flooding')
+    - level      : severity NOT NULL DEFAULT 'green' ('green' | 'yellow' | 'red')
+    - value      : DOUBLE PRECISION NOT NULL DEFAULT 0 (Metric numeric value)
+    - updated_at : TIMESTAMPTZ NOT NULL DEFAULT UTC now()
+    - Primary Key: (zone_id, type)
+
+  * public.events (Immutable Hazard & Alert Incident Log)
+    - id            : UUID PRIMARY KEY DEFAULT gen_random_uuid()
+    - zone_id       : TEXT NOT NULL REFERENCES public.zones(zone_id) ON DELETE CASCADE
+    - type          : zone_metric NOT NULL
+    - level         : severity NOT NULL DEFAULT 'red'
+    - status        : event_state NOT NULL DEFAULT 'open' ('open' | 'closed')
+    - opened_at     : TIMESTAMPTZ NOT NULL DEFAULT UTC now()
+    - closed_at     : TIMESTAMPTZ (Populated when conditions return to safe green)
+    - last_alert_at : TIMESTAMPTZ NOT NULL DEFAULT UTC now()
+
+  * public.surveys (Citizen Ground-Truth Reports)
+    - id         : UUID PRIMARY KEY DEFAULT gen_random_uuid()
+    - user_id    : UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE
+    - zone_id    : TEXT NOT NULL REFERENCES public.zones(zone_id) ON DELETE CASCADE
+    - type       : survey_kind NOT NULL ('air' | 'flood')
+    - answers    : JSONB NOT NULL DEFAULT '{}'::jsonb
+    - created_at : TIMESTAMPTZ NOT NULL DEFAULT UTC now()
+
+  * public.users (Resident Profiles)
+    - id         : UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE
+    - zone_id    : TEXT (Resident's primary or selected zone)
+    - name       : TEXT (Display name / Resident name)
+    - phone      : TEXT (Verified mobile phone number in E.164 format)
+    - lat        : DOUBLE PRECISION
+    - lng        : DOUBLE PRECISION
+    - created_at : TIMESTAMPTZ NOT NULL DEFAULT UTC now()
+
+3.3 Row-Level Security (RLS) Policies
+  * Zones & Zone Status : Public SELECT enabled (anonymous and authenticated users
+                          can query environmental status at all times).
+  * Events              : Public SELECT enabled (transparency for all campus incidents).
+  * Surveys             : Private SELECT (auth.uid() = user_id), Authenticated INSERT
+                          (auth.uid() = user_id with rate limits enforced server-side).
+  * Users               : Restricted ALL (auth.uid() = id). Users may only read and
+                          modify their own profile details.
+
+--------------------------------------------------------------------------------
+4. ENVIRONMENTAL MONITORING PIPELINE & DETERMINISTIC RULES
+--------------------------------------------------------------------------------
+
+4.1 Monitored Stations / Zones
+  1. DTU Academic Core & Library          (28.7495 N, 77.1172 E)
+  2. DTU Sports Complex & Forest Reserve   (28.7525 N, 77.1120 E)
+  3. Student Hostels & Residential Enclave (28.7450 N, 77.1165 E)
+  4. Shahbad Daulatpur Market & Village    (28.7440 N, 77.1235 E)
+  5. Bawana Road & Gate 2 Transit Corridor (28.7540 N, 77.1215 E)
+  6. Samaypur Badli Industrial & Rail Hub  (28.7405 N, 77.1350 E)
+
+4.2 Central Thresholds & Scientific Assumptions (src/lib/thresholds.ts)
+  * Air Quality Index (AQI):
+    - Green (Good / Moderate)       : AQI < 101
+    - Yellow (Warning / Sensitive)  : 101 <= AQI <= 150
+    - Red (Hazardous / Unhealthy)   : AQI > 150
+    - Standard Reference: CPCB (Central Pollution Control Board, India) & NAQI
+
+  * Ambient Temperature:
+    - Green (Comfortable / Normal)  : Temp < 33.0 °C
+    - Yellow (Elevated Thermal Stress): 33.0 °C <= Temp < 38.0 °C
+    - Red (Severe Heat Advisory)    : Temp >= 38.0 °C
+    - Standard Reference: IMD (India Meteorological Department) North Delhi heat rules
+
+  * Flooding & Waterlogging Risk:
+    - Warning Level : Precipitation Probability >= 35% OR 24h Rain Accumulation >= 10.0mm
+    - Danger Level  : Precipitation Probability >= 70% OR 24h Rain Accumulation >= 25.0mm
+    - Citizen Corroboration Engine:
+      If 2 or more independent survey reports within a 3-hour sliding window indicate
+      active waterlogging, severe puddles, or blocked drains, the zone flood severity
+      is automatically escalated (e.g. Green -> Yellow, Yellow -> Red) and tagged with
+      `isCommunityCorroborated: true`.
+
+4.3 Automated Lifecycle Management (Event State Machine)
+  * When a metric enters 'red' severity, the engine opens a new record in `events`
+    or updates `last_alert_at` on an active open incident.
+  * When conditions normalize to 'green', any currently open events for that zone
+    and metric are automatically set to `status = 'closed'` with a recorded `closed_at` timestamp.
+
+--------------------------------------------------------------------------------
+5. AUTHENTICATION SYSTEM: TRANSITION TO PHONE-FIRST AUTHENTICATION
+--------------------------------------------------------------------------------
+In the latest release, the authentication system underwent a major upgrade,
+transitioning from email-based authentication to a phone-number-first architecture.
+
+5.1 Supabase Phone Authentication Modes Supported
+  * Mode A: Phone Number + Password Login
+    - Directly logs the resident in using Supabase `signInWithPassword({ phone, password })`.
+  * Mode B: SMS One-Time Password (OTP) Login
+    - Triggers SMS OTP verification via Supabase `signInWithOtp({ phone })`
+    - Displays interactive 6-digit verification code input with a 45-second resend cooldown timer.
+    - Completes authentication via Supabase `verifyOtp({ phone, token, type: 'sms' })`.
+  * Mode C: Phone Number Sign-Up
+    - Collects Full Resident Name, Mobile Phone Number, and Secure Password.
+    - Registers through Supabase `signUp({ phone, password, options: { data: { full_name } } })`.
+    - Automatically provisions or synchronizes the user row in `public.users`.
+
+5.2 Internationalization & Phone Input UX
+  * Country Code Selector: Built-in international prefixes with India (+91) as primary,
+    accompanied by UK (+44), USA/Canada (+1), UAE (+971), Australia (+61), etc.
+  * Automatic Formatting: Trims whitespace, removes non-numeric artifacts, and ensures
+    E.164 compliance before dispatching to Supabase APIs.
+  * Helpful Error Diagnostics: Gracefully captures and translates Supabase responses
+    such as `phone_provider_disabled`, `invalid_credentials`, and SMS rate limit limits
+    into plain-English user recommendations.
+
+5.3 App-wide Integration of Phone Sessions
+  * Updated `UserSession` interface to make `phone` a first-class citizen alongside `name`.
+  * Navigation Bar (`Navbar.tsx`): Displays resident name with phone number fallback in
+    both light and dark modes with a quick sign-out action.
+  * Community Surveys (`SurveysSection.tsx`): Automatically attributes submissions to
+    the resident's verified phone number/name while masking sensitive credentials for privacy.
+
+--------------------------------------------------------------------------------
+6. FRONTEND COMPONENTS & USER EXPERIENCE
+--------------------------------------------------------------------------------
+
+6.1 Location Consent & Geolocation Modal (`LocationConsentModal.tsx`)
+  * Privacy-respecting modal shown on initial launch.
+  * Allows the user to grant one-click HTML5 geolocation or select from 6 predefined
+    DTU stations.
+  * Automatically calculates Euclidean distance to map the user to the nearest monitored zone.
+
+6.2 Real-Time Status Cards (`StatusCards.tsx`)
+  * Metric cards displaying live AQI, Temperature, and Flood Risk values.
+  * Visual severity badges (Green / Yellow / Red) with clear health advisories
+    (e.g., "Air Quality Alert - Sensitive groups wear N95", "Waterlogging Warning").
+  * Station selector pill to instantly switch readings across all campus sectors.
+
+6.3 Interactive Satellite & Street Map (`MapSection.tsx`)
+  * Embedded Google Maps view centered at DTU (28.7501, 77.1177).
+  * Layer toggle buttons: Air Quality (AQI), Temperature, and Flood Hazard layers.
+  * Advanced custom pin markers reflecting real-time color-coded severity.
+  * Interactive InfoWindows detailing exact metric values, coordinates, and ground status.
+  * User location marker indicating current campus proximity.
+
+6.4 Citizen Science Survey Submission (`SurveysSection.tsx`)
+  * Allows residents to submit Air Quality reports (smoke, industrial odor, visibility)
+    or Flood/Drainage reports (ankle-deep water, impassable road, overflowing drain).
+  * Enforces authenticated submission to deter spam and bot manipulation.
+  * Real-time list of recent community observations with relative timestamps and tags.
+
+6.5 Incident History & Alerts Log (`EventsSection.tsx`)
+  * Lists active and resolved critical environmental events.
+  * Clear visual status pills: "ACTIVE DANGER" vs "RESOLVED / CLOSED".
+  * Transparent audit trail showing opened timestamps and resolution times.
+
+6.6 Dark Mode & Responsive Layout
+  * Complete dark mode support toggled from the top navigation bar with persistent class.
+  * Responsive mobile-first design adapted for mobile phones, tablets, and desktop workstations.
+
+--------------------------------------------------------------------------------
+7. REST API ENDPOINTS SPECIFICATION
+--------------------------------------------------------------------------------
+The Express server exposes the following clean, typed REST endpoints:
+
+  * GET /api/zones
+    - Description: Returns list of all monitored zones with geographic coordinates.
+    - Response   : { zones: ZoneRecord[] }
+
+  * GET /api/zone-status
+    - Description: Returns latest evaluated condition for all zones and metrics.
+    - Response   : { statusList: ZoneStatusRecord[] }
+
+  * GET /api/events
+    - Description: Returns audit log of open and closed environmental hazard events.
+    - Response   : { events: EventRecord[] }
+
+  * GET /api/surveys?zone_id=:zoneId
+    - Description: Returns sanitized community survey reports (privacy-scrubbed).
+    - Response   : { surveys: SanitizedSurvey[], count: number }
+
+  * POST /api/surveys
+    - Description: Submits a new citizen survey report.
+    - Body       : { userId: string, zoneId: string, type: 'air' | 'flood', answers: object }
+    - Response   : { success: boolean, survey: SurveyRecord }
+
+  * GET /api/thresholds
+    - Description: Returns centralized threshold parameters and scientific limits.
+    - Response   : { thresholds: ThresholdConfig }
+
+  * GET /api/pipeline/status
+    - Description: Returns health status, last execution time, and cycle counts of background engine.
+    - Response   : { status: { isPipelineRunning, lastRunAt, runCount, intervalMinutes } }
+
+  * POST /api/pipeline/run
+    - Description: Triggers an immediate re-evaluation cycle across all external APIs.
+    - Response   : { success: boolean, evaluatedCount: number, errorCount: number }
+
+--------------------------------------------------------------------------------
+8. CODEBASE HYGIENE, VERIFICATION & RELIABILITY
+--------------------------------------------------------------------------------
+  * TypeScript Compilation : `npm run lint` (`tsc --noEmit`) passes with 0 errors.
+  * Vite Bundle Compilation: `npm run build` succeeds cleanly producing optimized assets.
+  * Server Runtime         : `tsx server.ts` starts seamlessly on port 3000, serving
+                             both Express API routes and Vite SPA simultaneously.
+  * Resilience             : Unhandled API or network exceptions are isolated per-station,
+                             ensuring that a failure in one external service never crashes
+                             the background daemon or the user interface.
+
+--------------------------------------------------------------------------------
+9. SUMMARY OF COMPLETED MILESTONES & NEXT STEPS
+--------------------------------------------------------------------------------
+[x] Milestone 1: Core environmental data ingestion (Google Air Quality + Google Weather APIs).
+[x] Milestone 2: Interactive map visualization with Google Maps JavaScript API & custom markers.
+[x] Milestone 3: Deterministic threshold scoring engine based on CPCB & IMD standards.
+[x] Milestone 4: Dual-layer persistence (Supabase PostgreSQL + local fail-safe JSON state).
+[x] Milestone 5: Community reporting module with automated corroboration logic for flood risks.
+[x] Milestone 6: Complete migration to Phone Number Authentication (Password & SMS OTP).
+[ ] Milestone 7 (Upcoming): Push notifications & SMS alert broadcasts for severe danger events.
+[ ] Milestone 8 (Upcoming): Sensor hardware integration (ESP32 IoT sensor node ingestion endpoints).
+
+================================================================================
+END OF ENVIROWATCH (ZEUS) TECHNICAL PROGRESS REPORT
+================================================================================

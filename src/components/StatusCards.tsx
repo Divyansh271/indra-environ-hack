@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, Sparkles, Wind, Sun, Waves } from 'lucide-react';
+import { RefreshCw, Wind, Sun, Waves, ShieldAlert } from 'lucide-react';
 import {
   fetchAirQuality,
   fetchWeatherData,
@@ -8,6 +8,12 @@ import {
   WeatherData,
   FloodRiskData,
 } from '../lib/environmentalApi';
+import {
+  CENTRAL_THRESHOLDS,
+  evaluateAqiSeverity,
+  evaluateTemperatureSeverity,
+  evaluateFloodingSeverity,
+} from '../lib/thresholds';
 
 interface StatusCardsProps {
   currentLocation: string;
@@ -50,32 +56,42 @@ export const StatusCards: React.FC<StatusCardsProps> = ({ currentLocation }) => 
   }, [currentLocation]);
 
   const aqiValue = airQuality?.aqi ?? 125;
+  const aqiSeverity = evaluateAqiSeverity(aqiValue);
   const aqiCategory = airQuality?.category ? airQuality.category.replace(' air quality', '') : 'Moderate';
   const aqiColor =
-    aqiValue > 150
+    aqiSeverity === 'red'
       ? 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800'
-      : aqiValue > 100
+      : aqiSeverity === 'yellow'
       ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
       : 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800';
-  const aqiDot = aqiValue > 150 ? 'bg-rose-500' : aqiValue > 100 ? 'bg-amber-500' : 'bg-emerald-500';
+  const aqiDot = aqiSeverity === 'red' ? 'bg-rose-500' : aqiSeverity === 'yellow' ? 'bg-amber-500' : 'bg-emerald-500';
 
+  const tempNum = weather?.temperature ?? 30.3;
+  const tempSeverity = evaluateTemperatureSeverity(tempNum);
   const tempValue = weather ? `${weather.temperature}°C` : '30.3°C';
   const tempStatus = weather?.condition || 'Mostly sunny';
   const tempColor =
-    weather && weather.temperature > 35
+    tempSeverity === 'red'
       ? 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800'
-      : 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800';
-  const tempDot = weather && weather.temperature > 35 ? 'bg-rose-500' : 'bg-amber-500';
-
-  const floodStatus = floodRisk?.status || 'Normal Drainage';
-  const floodLevel = floodRisk?.riskLevel || 'Low';
-  const floodColor =
-    floodLevel === 'High'
-      ? 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800'
-      : floodLevel === 'Moderate'
+      : tempSeverity === 'yellow'
       ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
       : 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800';
-  const floodDot = floodLevel === 'High' ? 'bg-rose-500' : floodLevel === 'Moderate' ? 'bg-amber-500' : 'bg-emerald-500';
+  const tempDot = tempSeverity === 'red' ? 'bg-rose-500' : tempSeverity === 'yellow' ? 'bg-amber-500' : 'bg-emerald-500';
+
+  const floodEval = evaluateFloodingSeverity(
+    weather?.precipitationProbability ?? 13,
+    weather?.rainAccumulation24h ?? 0.36,
+    0
+  );
+  const floodLevel = floodEval.level === 'red' ? 'High' : floodEval.level === 'yellow' ? 'Moderate' : 'Low';
+  const floodStatus = floodEval.level === 'red' ? 'Warning' : floodEval.level === 'yellow' ? 'Watch Advisory' : 'Normal Drainage';
+  const floodColor =
+    floodEval.level === 'red'
+      ? 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800'
+      : floodEval.level === 'yellow'
+      ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
+      : 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800';
+  const floodDot = floodEval.level === 'red' ? 'bg-rose-500' : floodEval.level === 'yellow' ? 'bg-amber-500' : 'bg-emerald-500';
 
   const metrics = [
     {

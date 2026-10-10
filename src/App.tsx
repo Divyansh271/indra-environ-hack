@@ -112,10 +112,18 @@ export default function App() {
       client.auth.getSession().then(({ data: { session } }) => {
         if (session?.user) {
           const metadata = session.user.user_metadata;
+          const phone = session.user.phone || '';
+          const email = session.user.email || '';
           setUser({
             id: session.user.id,
-            name: metadata?.full_name || metadata?.name || session.user.email?.split('@')[0] || 'User',
-            email: session.user.email || '',
+            name:
+              metadata?.full_name ||
+              metadata?.name ||
+              (phone ? `User (${phone})` : '') ||
+              email.split('@')[0] ||
+              'User',
+            phone,
+            email,
           });
         }
       });
@@ -125,10 +133,18 @@ export default function App() {
       } = client.auth.onAuthStateChange((_event, session) => {
         if (session?.user) {
           const metadata = session.user.user_metadata;
+          const phone = session.user.phone || '';
+          const email = session.user.email || '';
           setUser({
             id: session.user.id,
-            name: metadata?.full_name || metadata?.name || session.user.email?.split('@')[0] || 'User',
-            email: session.user.email || '',
+            name:
+              metadata?.full_name ||
+              metadata?.name ||
+              (phone ? `User (${phone})` : '') ||
+              email.split('@')[0] ||
+              'User',
+            phone,
+            email,
           });
         } else {
           setUser(null);

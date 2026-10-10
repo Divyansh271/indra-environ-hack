@@ -62,7 +62,7 @@ export const SurveysSection: React.FC<SurveysSectionProps> = ({
             ? 'Waterlogging'
             : 'Flooding',
         description: description.trim() || undefined,
-        submitted_by_name: user.name,
+        submitted_by_name: user.name || user.phone || 'Resident',
       };
 
       const res = await fetch('/api/surveys', {
