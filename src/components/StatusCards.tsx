@@ -10,21 +10,21 @@ export const StatusCards: React.FC<StatusCardsProps> = ({ currentLocation }) => 
       title: 'Air Quality (AQI)',
       value: '145',
       severity: 'Moderate',
-      statusColor: 'bg-amber-100 text-amber-800 border-amber-300',
+      statusColor: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800',
       dotColor: 'bg-amber-500',
     },
     {
       title: 'Temperature',
       value: '34°C',
       severity: 'Moderate',
-      statusColor: 'bg-amber-100 text-amber-800 border-amber-300',
+      statusColor: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800',
       dotColor: 'bg-amber-500',
     },
     {
       title: 'Flooding Risk',
       value: 'Moderate',
       severity: 'Moderate',
-      statusColor: 'bg-amber-100 text-amber-800 border-amber-300',
+      statusColor: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800',
       dotColor: 'bg-amber-500',
     },
   ];
@@ -36,13 +36,13 @@ export const StatusCards: React.FC<StatusCardsProps> = ({ currentLocation }) => 
         {metrics.map((item, index) => (
           <div
             key={index}
-            className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4"
+            className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900 transition-colors"
           >
             <div>
-              <div className="text-xs font-medium text-slate-500">
+              <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 {item.title}
               </div>
-              <div className="mt-1 text-2xl font-bold text-slate-900">
+              <div className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">
                 {item.value}
               </div>
             </div>
@@ -59,7 +59,7 @@ export const StatusCards: React.FC<StatusCardsProps> = ({ currentLocation }) => 
       </div>
 
       {/* Clear Demonstration Data Notice */}
-      <p className="text-center text-xs text-slate-500 pt-1">
+      <p className="text-center text-xs text-slate-500 dark:text-slate-400 pt-1">
         * Simulated demonstration data for {currentLocation}. Not live sensor readings.
       </p>
     </div>

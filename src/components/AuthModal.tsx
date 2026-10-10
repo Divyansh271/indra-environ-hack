@@ -96,23 +96,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
       role="dialog"
       aria-modal="true"
     >
-      <div className="relative w-full max-w-sm rounded-xl bg-white border border-slate-200 shadow-lg p-6">
+      <div className="relative w-full max-w-sm rounded-xl bg-white border border-slate-200 shadow-lg p-6 dark:border-slate-800 dark:bg-slate-900 transition-colors">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-1 text-slate-400 hover:text-slate-600 rounded transition-colors"
+          className="absolute top-4 right-4 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded transition-colors"
           aria-label="Close"
         >
           <X className="w-4 h-4" />
         </button>
 
-        <h2 className="text-lg font-bold text-slate-900">
+        <h2 className="text-lg font-bold text-slate-900 dark:text-white">
           {mode === 'login' ? 'Log In to Zeus' : 'Create an Account'}
         </h2>
-        <p className="mt-1 text-xs text-slate-500">
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
           {mode === 'login'
             ? 'Sign in to access localized environmental monitoring'
             : 'Join to track hyper-local environmental alerts'}
@@ -122,14 +122,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <div
             className={`mt-3 flex items-center gap-2 rounded-md p-2.5 text-xs font-medium ${
               statusMessage.type === 'success'
-                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                : 'bg-red-50 text-red-800 border border-red-200'
+                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-200 dark:border-emerald-800'
+                : 'bg-red-50 text-red-800 border border-red-200 dark:bg-red-950/60 dark:text-red-200 dark:border-red-800'
             }`}
           >
             {statusMessage.type === 'success' ? (
-              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
             ) : (
-              <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
+              <AlertCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
             )}
             <span>{statusMessage.text}</span>
           </div>
@@ -138,7 +138,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         <form onSubmit={handleSubmit} className="mt-4 space-y-3">
           {mode === 'signup' && (
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Full Name
               </label>
               <input
@@ -149,14 +149,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   if (errors.name) setErrors((prev) => ({ ...prev, name: '' }));
                 }}
                 placeholder="Your Name"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder-slate-500"
               />
-              {errors.name && <p className="mt-1 text-xs text-red-600">{errors.name}</p>}
+              {errors.name && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.name}</p>}
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
               Email Address
             </label>
             <input
@@ -167,13 +167,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 if (errors.email) setErrors((prev) => ({ ...prev, email: '' }));
               }}
               placeholder="user@example.com"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder-slate-500"
             />
-            {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email}</p>}
+            {errors.email && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.email}</p>}
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
               Password
             </label>
             <input
@@ -184,14 +184,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 if (errors.password) setErrors((prev) => ({ ...prev, password: '' }));
               }}
               placeholder="At least 6 characters"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder-slate-500"
             />
-            {errors.password && <p className="mt-1 text-xs text-red-600">{errors.password}</p>}
+            {errors.password && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.password}</p>}
           </div>
 
           {mode === 'signup' && (
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Confirm Password
               </label>
               <input
@@ -202,10 +202,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   if (errors.confirmPassword) setErrors((prev) => ({ ...prev, confirmPassword: '' }));
                 }}
                 placeholder="Re-enter password"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder-slate-500"
               />
               {errors.confirmPassword && (
-                <p className="mt-1 text-xs text-red-600">{errors.confirmPassword}</p>
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.confirmPassword}</p>
               )}
             </div>
           )}
@@ -228,14 +228,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </button>
         </form>
 
-        <div className="mt-4 pt-3 border-t border-slate-100 text-center text-xs text-slate-500">
+        <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-center text-xs text-slate-500 dark:text-slate-400">
           {mode === 'login' ? (
             <p>
               Don't have an account?{' '}
               <button
                 type="button"
                 onClick={() => switchMode('signup')}
-                className="font-medium text-emerald-700 hover:underline cursor-pointer"
+                className="font-medium text-emerald-700 dark:text-emerald-400 hover:underline cursor-pointer"
               >
                 Sign up
               </button>
@@ -246,7 +246,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <button
                 type="button"
                 onClick={() => switchMode('login')}
-                className="font-medium text-emerald-700 hover:underline cursor-pointer"
+                className="font-medium text-emerald-700 dark:text-emerald-400 hover:underline cursor-pointer"
               >
                 Log in
               </button>
