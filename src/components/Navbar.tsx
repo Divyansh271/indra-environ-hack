@@ -88,14 +88,16 @@ export const Navbar: React.FC<NavbarProps> = ({
           ) : (
             <div className="flex items-center gap-1.5">
               <button
+                type="button"
                 onClick={onOpenLogin}
                 className="rounded px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 Log In
               </button>
               <button
+                type="button"
                 onClick={onOpenSignup}
-                className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors cursor-pointer"
+                className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors cursor-pointer shadow-xs"
               >
                 Sign Up
               </button>

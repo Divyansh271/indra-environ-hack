@@ -7,6 +7,7 @@ import { LocationConsentModal } from './components/LocationConsentModal';
 import { AuthModal } from './components/AuthModal';
 import { UserSession } from './types';
 import { RefreshCw } from 'lucide-react';
+import { getSupabaseClient } from './lib/supabase';
 
 export default function App() {
   // Dark mode state: default light mode
@@ -31,7 +32,7 @@ export default function App() {
   const [isLocationModalOpen, setIsLocationModalOpen] = useState<boolean>(true);
   const [locationModalMode, setLocationModalMode] = useState<'consent' | 'manual'>('consent');
 
-  // Authentication State (frontend simulation only)
+  // Authentication State
   const [user, setUser] = useState<UserSession | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
@@ -45,6 +46,40 @@ export default function App() {
       setToastMessage(null);
     }, 2800);
   };
+
+  // Check and listen for active Supabase Auth session
+  useEffect(() => {
+    const client = getSupabaseClient();
+    if (client) {
+      client.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user) {
+          const metadata = session.user.user_metadata;
+          setUser({
+            name: metadata?.full_name || metadata?.name || session.user.email?.split('@')[0] || 'User',
+            email: session.user.email || '',
+          });
+        }
+      });
+
+      const {
+        data: { subscription },
+      } = client.auth.onAuthStateChange((_event, session) => {
+        if (session?.user) {
+          const metadata = session.user.user_metadata;
+          setUser({
+            name: metadata?.full_name || metadata?.name || session.user.email?.split('@')[0] || 'User',
+            email: session.user.email || '',
+          });
+        } else {
+          setUser(null);
+        }
+      });
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    }
+  }, []);
 
   const handleLocationSelected = (selectedLoc: string) => {
     setCurrentLocation(selectedLoc);
@@ -73,7 +108,15 @@ export default function App() {
     showToast(`Welcome, ${authenticatedUser.name}!`);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    const client = getSupabaseClient();
+    if (client) {
+      try {
+        await client.auth.signOut();
+      } catch (err) {
+        console.error('Error signing out:', err);
+      }
+    }
     setUser(null);
     showToast('Logged out successfully.');
   };
@@ -96,8 +139,9 @@ export default function App() {
         onLocationSelected={handleLocationSelected}
       />
 
-      {/* Optional Auth Modal */}
+      {/* Auth Modal (Login / Signup) */}
       <AuthModal
+        key={`auth-${authMode}-${isAuthModalOpen}`}
         isOpen={isAuthModalOpen}
         initialMode={authMode}
         onClose={() => setIsAuthModalOpen(false)}
