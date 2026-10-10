@@ -48,8 +48,24 @@ export interface MapZone {
 }
 
 export interface UserSession {
+  id?: string;
   name: string;
   email: string;
+}
+
+export interface ZoneStatusItem {
+  zone_id: string;
+  type: 'aqi' | 'temperature' | 'flooding';
+  level: 'green' | 'yellow' | 'red';
+  value: number;
+  updated_at: string;
+}
+
+export interface MonitoredZone {
+  zone_id: string;
+  name: string;
+  center_lat: number;
+  center_lng: number;
 }
 
 export interface LocationOption {

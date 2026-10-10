@@ -1,0 +1,185 @@
+{
+  "zones": [
+    {
+      "zone_id": "zone-academic",
+      "name": "DTU Academic Core & Library",
+      "center_lat": 28.7495,
+      "center_lng": 77.1172
+    },
+    {
+      "zone_id": "zone-sports-green",
+      "name": "DTU Sports Complex & Botanical Forest",
+      "center_lat": 28.7525,
+      "center_lng": 77.112
+    },
+    {
+      "zone_id": "zone-hostels",
+      "name": "Student Hostels & Residential Enclave",
+      "center_lat": 28.745,
+      "center_lng": 77.1165
+    },
+    {
+      "zone_id": "zone-shahbad-market",
+      "name": "Shahbad Daulatpur Village & Market Chowk",
+      "center_lat": 28.744,
+      "center_lng": 77.1235
+    },
+    {
+      "zone_id": "zone-bawana-road",
+      "name": "Bawana Road & Gate 2 Transit Corridor",
+      "center_lat": 28.754,
+      "center_lng": 77.1215
+    },
+    {
+      "zone_id": "zone-samaypur-badli",
+      "name": "Samaypur Badli Industrial & Rail Hub",
+      "center_lat": 28.7405,
+      "center_lng": 77.135
+    }
+  ],
+  "zoneStatus": {
+    "zone-academic:aqi": {
+      "zone_id": "zone-academic",
+      "type": "aqi",
+      "level": "yellow",
+      "value": 126,
+      "updated_at": "2026-10-10T12:21:43.919Z"
+    },
+    "zone-academic:temperature": {
+      "zone_id": "zone-academic",
+      "type": "temperature",
+      "level": "green",
+      "value": 31,
+      "updated_at": "2026-10-10T12:21:43.919Z"
+    },
+    "zone-academic:flooding": {
+      "zone_id": "zone-academic",
+      "type": "flooding",
+      "level": "green",
+      "value": 10,
+      "updated_at": "2026-10-10T12:21:43.919Z"
+    },
+    "zone-sports-green:aqi": {
+      "zone_id": "zone-sports-green",
+      "type": "aqi",
+      "level": "yellow",
+      "value": 126,
+      "updated_at": "2026-10-10T12:21:43.919Z"
+    },
+    "zone-sports-green:temperature": {
+      "zone_id": "zone-sports-green",
+      "type": "temperature",
+      "level": "green",
+      "value": 31,
+      "updated_at": "2026-10-10T12:21:43.919Z"
+    },
+    "zone-sports-green:flooding": {
+      "zone_id": "zone-sports-green",
+      "type": "flooding",
+      "level": "green",
+      "value": 10,
+      "updated_at": "2026-10-10T12:21:43.919Z"
+    },
+    "zone-hostels:aqi": {
+      "zone_id": "zone-hostels",
+      "type": "aqi",
+      "level": "yellow",
+      "value": 133,
+      "updated_at": "2026-10-10T12:21:43.919Z"
+    },
+    "zone-hostels:temperature": {
+      "zone_id": "zone-hostels",
+      "type": "temperature",
+      "level": "green",
+      "value": 31,
+      "updated_at": "2026-10-10T12:21:43.919Z"
+    },
+    "zone-hostels:flooding": {
+      "zone_id": "zone-hostels",
+      "type": "flooding",
+      "level": "green",
+      "value": 10,
+      "updated_at": "2026-10-10T12:21:43.919Z"
+    },
+    "zone-shahbad-market:aqi": {
+      "zone_id": "zone-shahbad-market",
+      "type": "aqi",
+      "level": "yellow",
+      "value": 137,
+      "updated_at": "2026-10-10T12:21:43.919Z"
+    },
+    "zone-shahbad-market:temperature": {
+      "zone_id": "zone-shahbad-market",
+      "type": "temperature",
+      "level": "green",
+      "value": 31,
+      "updated_at": "2026-10-10T12:21:43.919Z"
+    },
+    "zone-shahbad-market:flooding": {
+      "zone_id": "zone-shahbad-market",
+      "type": "flooding",
+      "level": "green",
+      "value": 10,
+      "updated_at": "2026-10-10T12:21:43.919Z"
+    },
+    "zone-bawana-road:aqi": {
+      "zone_id": "zone-bawana-road",
+      "type": "aqi",
+      "level": "yellow",
+      "value": 131,
+      "updated_at": "2026-10-10T12:21:43.919Z"
+    },
+    "zone-bawana-road:temperature": {
+      "zone_id": "zone-bawana-road",
+      "type": "temperature",
+      "level": "green",
+      "value": 31,
+      "updated_at": "2026-10-10T12:21:43.919Z"
+    },
+    "zone-bawana-road:flooding": {
+      "zone_id": "zone-bawana-road",
+      "type": "flooding",
+      "level": "green",
+      "value": 10,
+      "updated_at": "2026-10-10T12:21:43.919Z"
+    },
+    "zone-samaypur-badli:aqi": {
+      "zone_id": "zone-samaypur-badli",
+      "type": "aqi",
+      "level": "yellow",
+      "value": 141,
+      "updated_at": "2026-10-10T12:21:43.919Z"
+    },
+    "zone-samaypur-badli:temperature": {
+      "zone_id": "zone-samaypur-badli",
+      "type": "temperature",
+      "level": "green",
+      "value": 31,
+      "updated_at": "2026-10-10T12:21:43.919Z"
+    },
+    "zone-samaypur-badli:flooding": {
+      "zone_id": "zone-samaypur-badli",
+      "type": "flooding",
+      "level": "green",
+      "value": 10,
+      "updated_at": "2026-10-10T12:21:43.919Z"
+    }
+  },
+  "events": [],
+  "surveys": [
+    {
+      "id": "274fdb84-8002-432b-a623-ab9bd802b459",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "zone_id": "zone-academic",
+      "type": "air",
+      "answers": {
+        "air_quality": "Appears normal",
+        "temperature": "Normal",
+        "flooding": "No visible waterlogging"
+      },
+      "created_at": "2026-10-10T12:21:50.835Z"
+    }
+  ],
+  "lastRunAt": "2026-10-10T12:21:43.919Z",
+  "runCount": 1
+}

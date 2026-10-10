@@ -17,8 +17,12 @@ import {
   FloodRiskData,
 } from '../lib/environmentalApi';
 
+import { ZoneStatusItem } from '../types';
+
 interface MapSectionProps {
   currentLocation: string;
+  zoneStatusList?: ZoneStatusItem[];
+  onSelectStation?: (zoneId: string) => void;
 }
 
 interface MonitoredStation {
@@ -98,7 +102,11 @@ function MapController({ center }: { center: { lat: number; lng: number } }) {
   return null;
 }
 
-export const MapSection: React.FC<MapSectionProps> = ({ currentLocation }) => {
+export const MapSection: React.FC<MapSectionProps> = ({
+  currentLocation,
+  zoneStatusList = [],
+  onSelectStation,
+}) => {
   const [activeLayer, setActiveLayer] = useState<LayerType>('aqi');
   const [selectedStation, setSelectedStation] = useState<MonitoredStation | null>(null);
   const [stationAqi, setStationAqi] = useState<AirQualityData | null>(null);
@@ -163,6 +171,36 @@ export const MapSection: React.FC<MapSectionProps> = ({ currentLocation }) => {
   }, [selectedStation]);
 
   const getMarkerData = (station: MonitoredStation) => {
+    // Check if official zone_status exists for this station and activeLayer
+    const matchedStatus = zoneStatusList.find(
+      (s) =>
+        (s.zone_id === station.id ||
+          s.zone_id.replace('zone-', '') === station.id.replace('dtu-', '') ||
+          station.name.toLowerCase().includes(s.zone_id.replace('zone-', ''))) &&
+        s.type === activeLayer
+    );
+
+    if (matchedStatus) {
+      const pinBg =
+        matchedStatus.level === 'red'
+          ? '#ef4444'
+          : matchedStatus.level === 'yellow'
+          ? '#f59e0b'
+          : '#10b981';
+      const unit = activeLayer === 'aqi' ? 'AQI' : activeLayer === 'temperature' ? '°C' : '% Risk';
+      const label =
+        matchedStatus.level === 'red'
+          ? 'Hazard Alert'
+          : matchedStatus.level === 'yellow'
+          ? 'Advisory'
+          : 'Normal';
+      return {
+        value: `${matchedStatus.value} ${unit}`,
+        label,
+        pinBg,
+      };
+    }
+
     if (activeLayer === 'aqi') {
       const aqiNum = liveAqi?.aqi ? Math.round(liveAqi.aqi * (station.baseAqi / 125)) : station.baseAqi;
       const isGood = aqiNum <= 100;
@@ -337,7 +375,10 @@ export const MapSection: React.FC<MapSectionProps> = ({ currentLocation }) => {
                   key={station.id}
                   position={station.position}
                   title={`${station.name}: ${markerInfo.value}`}
-                  onClick={() => setSelectedStation(station)}
+                  onClick={() => {
+                    setSelectedStation(station);
+                    onSelectStation?.(station.id);
+                  }}
                 >
                   <Pin
                     background={markerInfo.pinBg}

@@ -101,6 +101,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           'User';
 
         const sessionUser: UserSession = {
+          id: data.user?.id,
           name: displayName,
           email: (data.user?.email || email.trim()).toLowerCase(),
         };
@@ -147,13 +148,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }
         try {
           await supabase.from('users').insert([
-            { id: data.user.id, name: name.trim(), email: email.trim().toLowerCase() },
+            { id: data.user.id, name: name.trim() },
           ]);
         } catch (e) {
           // ignore
         }
 
         const sessionUser: UserSession = {
+          id: data.user.id,
           name: name.trim() || data.user.email?.split('@')[0] || 'User',
           email: (data.user.email || email.trim()).toLowerCase(),
         };

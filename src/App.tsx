@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { StatusCards } from './components/StatusCards';
 import { MapSection } from './components/MapSection';
+import { SurveysSection } from './components/SurveysSection';
+import { EventsSection, EventItem } from './components/EventsSection';
 import { Footer } from './components/Footer';
 import { LocationConsentModal } from './components/LocationConsentModal';
 import { AuthModal } from './components/AuthModal';
-import { UserSession } from './types';
-import { RefreshCw } from 'lucide-react';
+import { UserSession, MonitoredZone, ZoneStatusItem } from './types';
+import { RefreshCw, Play, CheckCircle2, ShieldAlert, Cpu } from 'lucide-react';
 import { getSupabaseClient } from './lib/supabase';
 
 export default function App() {
@@ -29,6 +31,7 @@ export default function App() {
   // First-visit location consent state
   const [hasLocationConsent, setHasLocationConsent] = useState<boolean>(false);
   const [currentLocation, setCurrentLocation] = useState<string>('');
+  const [currentZoneId, setCurrentZoneId] = useState<string>('zone-academic');
   const [isLocationModalOpen, setIsLocationModalOpen] = useState<boolean>(true);
   const [locationModalMode, setLocationModalMode] = useState<'consent' | 'manual'>('consent');
 
@@ -37,6 +40,23 @@ export default function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
 
+  // Backend Pipeline & Database State
+  const [zones, setZones] = useState<MonitoredZone[]>([]);
+  const [zoneStatusList, setZoneStatusList] = useState<ZoneStatusItem[]>([]);
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [pipelineStatus, setPipelineStatus] = useState<{
+    isPipelineRunning: boolean;
+    lastRunAt: string | null;
+    runCount: number;
+    intervalMinutes: number;
+  }>({
+    isPipelineRunning: false,
+    lastRunAt: null,
+    runCount: 0,
+    intervalMinutes: 60,
+  });
+  const [isEvaluatingPipeline, setIsEvaluatingPipeline] = useState<boolean>(false);
+
   // Brief toast feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -44,8 +64,46 @@ export default function App() {
     setToastMessage(message);
     setTimeout(() => {
       setToastMessage(null);
-    }, 2800);
+    }, 3200);
   };
+
+  // Load backend data (zones, zone-status, events, pipeline status)
+  const loadBackendData = async () => {
+    try {
+      const [zonesRes, statusRes, eventsRes, pipeRes] = await Promise.all([
+        fetch('/api/zones'),
+        fetch('/api/zone-status'),
+        fetch('/api/events'),
+        fetch('/api/pipeline/status'),
+      ]);
+
+      if (zonesRes.ok) {
+        const d = await zonesRes.json();
+        if (d.zones) setZones(d.zones);
+      }
+      if (statusRes.ok) {
+        const d = await statusRes.json();
+        if (d.statusList) setZoneStatusList(d.statusList);
+      }
+      if (eventsRes.ok) {
+        const d = await eventsRes.json();
+        if (d.events) setEvents(d.events);
+      }
+      if (pipeRes.ok) {
+        const d = await pipeRes.json();
+        if (d.status) setPipelineStatus(d.status);
+      }
+    } catch (err) {
+      console.warn('[Backend Sync Warning]', err);
+    }
+  };
+
+  useEffect(() => {
+    loadBackendData();
+    // Poll every 30 seconds for live zone status & event updates
+    const timer = setInterval(loadBackendData, 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Check and listen for active Supabase Auth session
   useEffect(() => {
@@ -55,6 +113,7 @@ export default function App() {
         if (session?.user) {
           const metadata = session.user.user_metadata;
           setUser({
+            id: session.user.id,
             name: metadata?.full_name || metadata?.name || session.user.email?.split('@')[0] || 'User',
             email: session.user.email || '',
           });
@@ -67,6 +126,7 @@ export default function App() {
         if (session?.user) {
           const metadata = session.user.user_metadata;
           setUser({
+            id: session.user.id,
             name: metadata?.full_name || metadata?.name || session.user.email?.split('@')[0] || 'User',
             email: session.user.email || '',
           });
@@ -85,6 +145,21 @@ export default function App() {
     setCurrentLocation(selectedLoc);
     setHasLocationConsent(true);
     setIsLocationModalOpen(false);
+
+    // Map location string to zone ID
+    const locLower = selectedLoc.toLowerCase();
+    if (locLower.includes('rohini')) {
+      setCurrentZoneId('zone-rohini');
+    } else if (locLower.includes('samaypur')) {
+      setCurrentZoneId('zone-samaypur-badli');
+    } else if (locLower.includes('bawana')) {
+      setCurrentZoneId('zone-bawana-road');
+    } else if (locLower.includes('shahbad')) {
+      setCurrentZoneId('zone-shahbad-market');
+    } else {
+      setCurrentZoneId('zone-academic');
+    }
+
     showToast(`Location set: ${selectedLoc}`);
   };
 
@@ -121,11 +196,30 @@ export default function App() {
     showToast('Logged out successfully.');
   };
 
+  // Trigger manual pipeline run
+  const handleTriggerPipeline = async () => {
+    setIsEvaluatingPipeline(true);
+    try {
+      const res = await fetch('/api/pipeline/run', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(`Pipeline evaluated ${data.evaluatedZones} zones (${data.newEventsCreated} new dangerous events).`);
+        await loadBackendData();
+      } else {
+        showToast(data.message || 'Pipeline evaluation completed.');
+      }
+    } catch (err: any) {
+      showToast('Error triggering evaluation cycle.');
+    } finally {
+      setIsEvaluatingPipeline(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 font-sans antialiased transition-colors">
       {/* Toast Banner */}
       {toastMessage && (
-        <div className="fixed bottom-4 right-4 z-50 rounded-md bg-slate-900 px-3.5 py-2 text-xs font-medium text-white shadow-md dark:bg-slate-800 dark:ring-1 dark:ring-slate-700">
+        <div className="fixed bottom-4 right-4 z-50 rounded-md bg-slate-900 px-3.5 py-2 text-xs font-medium text-white shadow-md dark:bg-slate-800 dark:ring-1 dark:ring-slate-700 animate-fade-in">
           {toastMessage}
         </div>
       )}
@@ -158,7 +252,7 @@ export default function App() {
             Welcome to Zeus
           </h1>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 max-w-sm">
-            Please select your location to view local environmental conditions.
+            Please select your location to view local environmental conditions and community reports.
           </p>
           <button
             onClick={() => setIsLocationModalOpen(true)}
@@ -182,6 +276,42 @@ export default function App() {
           />
 
           <main className="flex-1 mx-auto w-full max-w-5xl px-4 sm:px-6 pt-5 pb-8 space-y-5">
+            {/* Pipeline Status Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-xs shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex items-center gap-2">
+                <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+                <span className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                  <Cpu className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                  Scheduled Monitoring Pipeline:
+                </span>
+                <span className="text-slate-600 dark:text-slate-400">
+                  Every {pipelineStatus.intervalMinutes}m • {zones.length || 6} Monitored Zones
+                </span>
+                {pipelineStatus.lastRunAt && (
+                  <span className="hidden md:inline text-[11px] text-slate-400">
+                    (Last cycle:{' '}
+                    {new Date(pipelineStatus.lastRunAt).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                    )
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleTriggerPipeline}
+                  disabled={isEvaluatingPipeline}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer disabled:opacity-60"
+                >
+                  <Play className={`h-3 w-3 text-emerald-600 ${isEvaluatingPipeline ? 'animate-spin' : ''}`} />
+                  <span>{isEvaluatingPipeline ? 'Evaluating...' : 'Run Pipeline Now'}</span>
+                </button>
+              </div>
+            </div>
+
             {/* Compact Header Bar */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-slate-800">
               <div>
@@ -189,7 +319,7 @@ export default function App() {
                   Environmental Dashboard
                 </h1>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Monitoring area: <span className="font-medium text-slate-800 dark:text-slate-200">{currentLocation}</span>
+                  Active Area: <span className="font-medium text-slate-800 dark:text-slate-200">{currentLocation}</span>
                 </p>
               </div>
 
@@ -205,8 +335,37 @@ export default function App() {
             {/* Exactly Three Primary Environmental Metrics (Compact) */}
             <StatusCards currentLocation={currentLocation} />
 
-            {/* Simplified Map with 3 layer toggles and compact legend */}
-            <MapSection currentLocation={currentLocation} />
+            {/* Simplified Map with 3 layer toggles, zone markers, and live telemetry */}
+            <MapSection
+              currentLocation={currentLocation}
+              zoneStatusList={zoneStatusList}
+              onSelectStation={(stId) => setCurrentZoneId(stId)}
+            />
+
+            {/* Compact Website Surveys ("Report local conditions") */}
+            <SurveysSection
+              currentZoneId={currentZoneId}
+              zones={zones.length > 0 ? zones : [
+                { zone_id: 'zone-academic', name: 'DTU Academic Core & Library' },
+                { zone_id: 'zone-sports-green', name: 'DTU Sports Complex & Forest' },
+                { zone_id: 'zone-hostels', name: 'Student Hostels Enclave' },
+                { zone_id: 'zone-shahbad-market', name: 'Shahbad Daulatpur Village' },
+                { zone_id: 'zone-bawana-road', name: 'Bawana Road Transit Corridor' },
+                { zone_id: 'zone-samaypur-badli', name: 'Samaypur Badli Industrial Hub' },
+              ]}
+              user={user}
+              onOpenLogin={handleOpenLogin}
+              onSurveySubmitted={() => {
+                showToast('Report submitted! Syncing pipeline state...');
+                loadBackendData();
+              }}
+            />
+
+            {/* Immutable Incident History ("events") */}
+            <EventsSection
+              events={events}
+              zones={zones}
+            />
           </main>
 
           <Footer />
