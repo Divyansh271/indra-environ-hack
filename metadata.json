@@ -1,0 +1,6 @@
+{
+  "name": "EnviroWatch",
+  "description": "Hyperlocal environmental monitoring for Delhi Technological University (DTU) and surrounding areas, tracking air quality, temperature, and flooding conditions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

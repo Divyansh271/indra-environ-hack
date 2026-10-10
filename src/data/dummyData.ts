@@ -1,0 +1,297 @@
+import { MapZone, LocationOption } from '../types';
+
+export const SAMPLE_LOCATIONS: LocationOption[] = [
+  {
+    id: 'dtu-main',
+    name: 'DTU, Shahbad Daulatpur',
+    area: 'North West Delhi',
+    pincode: '110042',
+    isPopular: true,
+  },
+  {
+    id: 'rohini',
+    name: 'Rohini, Delhi',
+    area: 'Sector 16 & 17, North West Delhi',
+    pincode: '110089',
+    isPopular: true,
+  },
+  {
+    id: 'samaypur',
+    name: 'Samaypur, Delhi',
+    area: 'Samaypur Badli, North Delhi',
+    pincode: '110042',
+    isPopular: true,
+  },
+  {
+    id: 'bawana',
+    name: 'Bawana Road, Delhi',
+    area: 'Industrial Area Border',
+    pincode: '110039',
+    isPopular: false,
+  },
+  {
+    id: 'sanjay-gandhi',
+    name: 'Sanjay Gandhi Transport Nagar',
+    area: 'GT Karnal Bypass',
+    pincode: '110042',
+    isPopular: false,
+  },
+];
+
+export const INITIAL_LOCATION = 'DTU, Shahbad Daulatpur, Delhi';
+
+export const MAP_ZONES: MapZone[] = [
+  {
+    id: 'zone-academic',
+    name: 'DTU Academic Core & Library',
+    category: 'campus',
+    coordinatesLabel: '28.7495° N, 77.1172° E',
+    path: 'M 220 160 L 390 150 L 410 260 L 230 270 Z',
+    center: { x: 310, y: 210 },
+    layers: {
+      aqi: {
+        value: 132,
+        label: '132 AQI',
+        severity: 'moderate',
+        status: 'Moderate (Sensitive caution)',
+        pollutantLeader: 'PM2.5: 52 µg/m³',
+      },
+      temperature: {
+        value: 33,
+        label: '33°C',
+        severity: 'moderate',
+        status: 'Normal Summer (Shaded walkways)',
+        heatIndex: 'Feels like 35°C',
+      },
+      flooding: {
+        value: 12,
+        label: '12% Low',
+        severity: 'low',
+        status: 'Good Drainage (Elevated plinth)',
+        drainageCapacity: '85% Clear Storm Drains',
+      },
+    },
+  },
+  {
+    id: 'zone-sports-green',
+    name: 'DTU Sports Complex & Botanical Forest',
+    category: 'greenery',
+    coordinatesLabel: '28.7520° N, 77.1120° E',
+    path: 'M 60 140 L 210 150 L 220 280 L 80 290 Z',
+    center: { x: 140, y: 215 },
+    layers: {
+      aqi: {
+        value: 88,
+        label: '88 AQI',
+        severity: 'low',
+        status: 'Satisfactory (Tree Canopy Filter)',
+        pollutantLeader: 'PM10: 45 µg/m³',
+      },
+      temperature: {
+        value: 30,
+        label: '30°C',
+        severity: 'low',
+        status: 'Microclimate Cooling (-3°C below asphalt)',
+        heatIndex: 'Feels like 31°C',
+      },
+      flooding: {
+        value: 20,
+        label: '20% Low',
+        severity: 'low',
+        status: 'High Soil Absorption',
+        drainageCapacity: '95% Natural Infiltration',
+      },
+    },
+  },
+  {
+    id: 'zone-hostels',
+    name: 'Student Hostels & Residential Enclave',
+    category: 'campus',
+    coordinatesLabel: '28.7450° N, 77.1165° E',
+    path: 'M 225 285 L 405 275 L 395 380 L 210 375 Z',
+    center: { x: 305, y: 330 },
+    layers: {
+      aqi: {
+        value: 145,
+        label: '145 AQI',
+        severity: 'moderate',
+        status: 'Moderate / Sensitive Group Alert',
+        pollutantLeader: 'PM2.5: 58 µg/m³',
+      },
+      temperature: {
+        value: 34,
+        label: '34°C',
+        severity: 'moderate',
+        status: 'Warm (Moderate concrete heat island)',
+        heatIndex: 'Feels like 37°C',
+      },
+      flooding: {
+        value: 48,
+        label: '48% Moderate',
+        severity: 'moderate',
+        status: 'Slow Runoff near Mess 3',
+        drainageCapacity: '60% Flow Efficiency',
+      },
+    },
+  },
+  {
+    id: 'zone-shahbad-market',
+    name: 'Shahbad Daulatpur Village & Market Chowk',
+    category: 'residential',
+    coordinatesLabel: '28.7440° N, 77.1235° E',
+    path: 'M 420 260 L 580 250 L 590 380 L 410 385 Z',
+    center: { x: 500, y: 315 },
+    layers: {
+      aqi: {
+        value: 168,
+        label: '168 AQI',
+        severity: 'high',
+        status: 'Unhealthy (Dense vehicular traffic & cooking smoke)',
+        pollutantLeader: 'PM2.5: 78 µg/m³',
+      },
+      temperature: {
+        value: 36,
+        label: '36°C',
+        severity: 'high',
+        status: 'High Heat Trapping (Dense settlement)',
+        heatIndex: 'Feels like 40°C',
+      },
+      flooding: {
+        value: 65,
+        label: '65% Warning',
+        severity: 'high',
+        status: 'Waterlogging Prone during heavy downpours',
+        drainageCapacity: '35% Flow Capacity (Narrow drains)',
+      },
+    },
+  },
+  {
+    id: 'zone-bawana-road',
+    name: 'Bawana Road & Gate 2 Transit Corridor',
+    category: 'highway',
+    coordinatesLabel: '28.7535° N, 77.1220° E',
+    path: 'M 400 130 L 620 120 L 590 240 L 415 245 Z',
+    center: { x: 505, y: 180 },
+    layers: {
+      aqi: {
+        value: 192,
+        label: '192 AQI',
+        severity: 'high',
+        status: 'Unhealthy (Heavy truck transit & dust)',
+        pollutantLeader: 'PM10: 160 µg/m³',
+      },
+      temperature: {
+        value: 38,
+        label: '38°C',
+        severity: 'high',
+        status: 'Asphalt Thermal Radiation Warning',
+        heatIndex: 'Feels like 42°C',
+      },
+      flooding: {
+        value: 32,
+        label: '32% Low-Mod',
+        severity: 'moderate',
+        status: 'Moderate Puddling on Road Edges',
+        drainageCapacity: '70% Culvert Clearance',
+      },
+    },
+  },
+  {
+    id: 'zone-drain-wetland',
+    name: 'Western Yamuna Canal Branch / Low Drain Basin',
+    category: 'waterway',
+    coordinatesLabel: '28.7410° N, 77.1100° E',
+    path: 'M 50 310 L 200 300 L 190 430 L 40 420 Z',
+    center: { x: 120, y: 365 },
+    layers: {
+      aqi: {
+        value: 120,
+        label: '120 AQI',
+        severity: 'moderate',
+        status: 'Moderate (Humid valley inversion)',
+        pollutantLeader: 'PM2.5: 46 µg/m³',
+      },
+      temperature: {
+        value: 31,
+        label: '31°C',
+        severity: 'low',
+        status: 'Water Evaporative Buffer',
+        heatIndex: 'Feels like 34°C (Higher humidity)',
+      },
+      flooding: {
+        value: 82,
+        label: '82% High Risk',
+        severity: 'high',
+        status: 'Surge Water Alert (Monsoon runoff catchment)',
+        drainageCapacity: '25% Siltation warning',
+      },
+    },
+  },
+  {
+    id: 'zone-samaypur-badli',
+    name: 'Samaypur Badli Industrial & Rail Hub',
+    category: 'residential',
+    coordinatesLabel: '28.7405° N, 77.1350° E',
+    path: 'M 600 250 L 760 240 L 750 400 L 600 390 Z',
+    center: { x: 675, y: 320 },
+    layers: {
+      aqi: {
+        value: 215,
+        label: '215 AQI',
+        severity: 'very-high',
+        status: 'Very Unhealthy (Logistics & generator emissions)',
+        pollutantLeader: 'PM2.5: 110 µg/m³',
+      },
+      temperature: {
+        value: 37,
+        label: '37°C',
+        severity: 'high',
+        status: 'Severe Urban Heat Island',
+        heatIndex: 'Feels like 41°C',
+      },
+      flooding: {
+        value: 58,
+        label: '58% Moderate',
+        severity: 'moderate',
+        status: 'Railway underpass water pooling watch',
+        drainageCapacity: '45% Pumping station active',
+      },
+    },
+  },
+];
+
+export const LAYER_CONFIG = {
+  aqi: {
+    name: 'Air Quality (AQI)',
+    unit: 'AQI',
+    shortDesc: 'Ambient PM2.5, PM10 and gas dispersion index',
+    legend: [
+      { label: 'Good / Moderate (0 - 100)', color: 'bg-emerald-500', text: 'emerald', border: 'border-emerald-400' },
+      { label: 'Unhealthy for Sensitive (101 - 150)', color: 'bg-amber-400', text: 'amber', border: 'border-amber-400' },
+      { label: 'Unhealthy (151 - 200)', color: 'bg-orange-500', text: 'orange', border: 'border-orange-500' },
+      { label: 'Very Unhealthy (> 200)', color: 'bg-rose-600', text: 'rose', border: 'border-rose-500' },
+    ],
+  },
+  temperature: {
+    name: 'Surface & Ambient Heat (°C)',
+    unit: '°C',
+    shortDesc: 'Microclimate temperatures & heat vulnerability zones',
+    legend: [
+      { label: 'Mild / Shaded (< 31°C)', color: 'bg-emerald-500', text: 'emerald', border: 'border-emerald-400' },
+      { label: 'Moderate Heat (31°C - 35°C)', color: 'bg-amber-400', text: 'amber', border: 'border-amber-400' },
+      { label: 'High Heat / Asphalt (36°C - 39°C)', color: 'bg-orange-500', text: 'orange', border: 'border-orange-500' },
+      { label: 'Extreme Heat (> 39°C)', color: 'bg-rose-600', text: 'rose', border: 'border-rose-500' },
+    ],
+  },
+  flooding: {
+    name: 'Flooding & Inundation Risk',
+    unit: '% Risk',
+    shortDesc: 'Topography-based storm runoff and drainage accumulation',
+    legend: [
+      { label: 'Low Risk (< 25%)', color: 'bg-emerald-500', text: 'emerald', border: 'border-emerald-400' },
+      { label: 'Moderate Watch (25% - 50%)', color: 'bg-amber-400', text: 'amber', border: 'border-amber-400' },
+      { label: 'High Risk / Waterlogging (50% - 75%)', color: 'bg-orange-500', text: 'orange', border: 'border-orange-500' },
+      { label: 'Critical Drainage Inundation (> 75%)', color: 'bg-rose-600', text: 'rose', border: 'border-rose-500' },
+    ],
+  },
+};
