@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import {
   evaluateAqiSeverity,
   evaluateTemperatureSeverity,
@@ -9,16 +9,33 @@ import {
   CENTRAL_THRESHOLDS,
   SeverityColor,
 } from '../src/lib/thresholds';
+import { notifyResidents } from '../src/server/notify';
 
-// Environment variables
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://cvwykoupwkywiyhanivr.supabase.co';
-const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_QgPwjohYfGmmpKrmnyTMfA_bf-VJH1r';
-const GOOGLE_API_KEY = process.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyBu5VJGo-eqvo-7ONsVBMrOVXoRgENDCx4';
+// Environment variables configuration (server-only secrets never leaked to client)
+const SUPABASE_URL =
+  process.env.SUPABASE_URL ||
+  process.env.VITE_SUPABASE_URL ||
+  'https://cvwykoupwkywiyhanivr.supabase.co';
+
+const SUPABASE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  process.env.VITE_SUPABASE_ANON_KEY ||
+  'sb_publishable_QgPwjohYfGmmpKrmnyTMfA_bf-VJH1r';
+
+// Server-only Google API Key for environmental APIs
+const GOOGLE_API_KEY =
+  process.env.GOOGLE_API_KEY ||
+  process.env.VITE_GOOGLE_MAPS_API_KEY ||
+  'AIzaSyBu5VJGo-eqvo-7ONsVBMrOVXoRgENDCx4';
+
 const ATTRIBUTION_ID = 'gmp_mcp_codeassist_v1_aistudio';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: false },
+});
 
-// Data structure models matching database schema
+// Data models matching the database schema
 export interface ZoneRecord {
   zone_id: string;
   name: string;
@@ -32,6 +49,9 @@ export interface ZoneStatusRecord {
   level: SeverityColor;
   value: number;
   updated_at: string;
+  ai_summary?: string | null;
+  summary_updated_at?: string | null;
+  survey_count?: number;
 }
 
 export interface EventRecord {
@@ -43,6 +63,7 @@ export interface EventRecord {
   opened_at: string;
   closed_at: string | null;
   last_alert_at: string;
+  green_checks?: number;
 }
 
 export interface SurveyRecord {
@@ -54,7 +75,6 @@ export interface SurveyRecord {
   created_at: string;
 }
 
-// Default Monitored Areas around DTU and North West Delhi
 export const DEFAULT_ZONES: ZoneRecord[] = [
   {
     zone_id: 'zone-academic',
@@ -94,7 +114,7 @@ export const DEFAULT_ZONES: ZoneRecord[] = [
   },
 ];
 
-// Persistent state file path for fail-safe server continuity
+// Persistent state file path for backup read fallback
 const STATE_FILE_PATH = path.resolve(process.cwd(), 'data', 'pipeline_state.json');
 
 interface LocalState {
@@ -104,6 +124,8 @@ interface LocalState {
   surveys: SurveyRecord[];
   lastRunAt: string | null;
   runCount: number;
+  lastDbError: string | null;
+  isUsingCachedData: boolean;
 }
 
 function loadState(): LocalState {
@@ -122,6 +144,8 @@ function loadState(): LocalState {
     surveys: [],
     lastRunAt: null,
     runCount: 0,
+    lastDbError: null,
+    isUsingCachedData: false,
   };
 }
 
@@ -133,7 +157,7 @@ function saveState(state: LocalState): void {
     }
     fs.writeFileSync(STATE_FILE_PATH, JSON.stringify(state, null, 2), 'utf-8');
   } catch (err) {
-    console.error('[Pipeline] Error saving state:', err);
+    console.error('[Pipeline] Error saving local state:', err);
   }
 }
 
@@ -141,7 +165,7 @@ let memoryState: LocalState = loadState();
 let isPipelineRunning = false;
 
 /**
- * Fetch environmental data from Google Air Quality API
+ * Fetch environmental data from Google Air Quality API (server-side only)
  */
 async function fetchAirQualityFromApi(lat: number, lng: number): Promise<{ aqi: number; isFresh: boolean }> {
   try {
@@ -170,12 +194,11 @@ async function fetchAirQualityFromApi(lat: number, lng: number): Promise<{ aqi: 
   } catch (err) {
     console.warn(`[Pipeline] Air quality API warning for ${lat},${lng}:`, err);
   }
-  // Deterministic baseline if temporary network blip
   return { aqi: 125, isFresh: false };
 }
 
 /**
- * Fetch environmental data from Google Weather API
+ * Fetch environmental data from Google Weather API (server-side only)
  */
 async function fetchWeatherFromApi(lat: number, lng: number): Promise<{
   temperature: number;
@@ -215,7 +238,7 @@ async function fetchWeatherFromApi(lat: number, lng: number): Promise<{
 }
 
 /**
- * Sync zones from Supabase (or populate default zones)
+ * Sync and seed zones from Supabase (or populate default zones)
  */
 export async function syncZones(): Promise<ZoneRecord[]> {
   try {
@@ -225,11 +248,20 @@ export async function syncZones(): Promise<ZoneRecord[]> {
       saveState(memoryState);
       return data as ZoneRecord[];
     }
-  } catch (err) {
-    console.warn('[Pipeline] Could not fetch zones from Supabase, using local zones.');
+
+    // If table is empty, attempt to seed default zones
+    if (!error && (!data || data.length === 0)) {
+      await supabase.from('zones').upsert(DEFAULT_ZONES, { onConflict: 'zone_id' });
+      memoryState.zones = [...DEFAULT_ZONES];
+      saveState(memoryState);
+      return DEFAULT_ZONES;
+    }
+  } catch (err: any) {
+    console.warn('[Pipeline] Could not fetch zones from Supabase, using local zones:', err.message);
+    memoryState.lastDbError = err.message;
+    memoryState.isUsingCachedData = true;
   }
 
-  // If Supabase zones are empty, ensure local memory has default zones
   if (memoryState.zones.length === 0) {
     memoryState.zones = [...DEFAULT_ZONES];
     saveState(memoryState);
@@ -238,32 +270,140 @@ export async function syncZones(): Promise<ZoneRecord[]> {
 }
 
 /**
- * Evaluate recent community surveys for a zone
+ * Ensure initial zone_status rows exist in DB so .update() works
+ * Does NOT overwrite existing ai_summary, summary_updated_at, or survey_count.
  */
-export function getRecentCorroboratingSurveys(zoneId: string, hoursWindow = 3): SurveyRecord[] {
-  const cutoff = Date.now() - hoursWindow * 3600 * 1000;
-  return memoryState.surveys.filter((s) => {
-    if (s.zone_id !== zoneId) return false;
-    const time = new Date(s.created_at).getTime();
-    if (isNaN(time) || time < cutoff) return false;
-
-    // Check if report indicates flooding / waterlogging
-    if (s.type === 'flood') {
-      const status = s.answers?.flooding || s.answers?.status || s.answers?.response;
-      return status === 'Waterlogging' || status === 'Flooding' || status === 'waterlogging' || status === 'flooding';
+async function ensureInitialZoneStatus(zones: ZoneRecord[]) {
+  try {
+    const { data, error } = await supabase.from('zone_status').select('zone_id, type');
+    if (error) {
+      console.warn('[Pipeline] Warning checking zone_status rows:', error.message);
+      return;
     }
-    return false;
-  });
+
+    const existingKeys = new Set((data || []).map((r) => `${r.zone_id}:${r.type}`));
+    const rowsToInsert: any[] = [];
+    const metrics: Array<'aqi' | 'temperature' | 'flooding'> = ['aqi', 'temperature', 'flooding'];
+
+    for (const z of zones) {
+      for (const m of metrics) {
+        if (!existingKeys.has(`${z.zone_id}:${m}`)) {
+          rowsToInsert.push({
+            zone_id: z.zone_id,
+            type: m,
+            level: 'green',
+            value: m === 'temperature' ? 25.0 : m === 'aqi' ? 50 : 0,
+            updated_at: new Date().toISOString(),
+            ai_summary: null,
+            summary_updated_at: null,
+            survey_count: 0,
+          });
+        }
+      }
+    }
+
+    if (rowsToInsert.length > 0) {
+      await supabase.from('zone_status').insert(rowsToInsert);
+    }
+  } catch (err: any) {
+    console.warn('[Pipeline] Warning ensuring initial zone status:', err.message);
+  }
 }
 
 /**
- * Run the complete scheduled monitoring evaluation pipeline
+ * Corroborating flood surveys:
+ * Must count DISTINCT users (latest survey per user) inside the 3-hour window
+ * where the user's latest survey indicated flooding/waterlogging (water_level !== 'none').
  */
-export async function runMonitoringPipeline(): Promise<{
+export async function getDistinctCorroboratingFloodUsersCount(
+  zoneId: string,
+  hoursWindow = 3
+): Promise<number> {
+  const cutoff = new Date(Date.now() - hoursWindow * 3600 * 1000).toISOString();
+
+  // Try querying from Supabase first
+  try {
+    const { data, error } = await supabase
+      .from('surveys')
+      .select('user_id, answers, created_at')
+      .eq('zone_id', zoneId)
+      .eq('type', 'flood')
+      .gte('created_at', cutoff)
+      .order('created_at', { ascending: false });
+
+    if (!error && data) {
+      // Group by distinct user_id, taking the latest survey
+      const latestByUser = new Map<string, any>();
+      for (const s of data) {
+        if (!latestByUser.has(s.user_id)) {
+          latestByUser.set(s.user_id, s.answers);
+        }
+      }
+
+      let corroboratingUsers = 0;
+      for (const answers of latestByUser.values()) {
+        const waterLevel = answers?.water_level;
+        const legacyStatus = answers?.flooding;
+        if (
+          (waterLevel && waterLevel !== 'none') ||
+          legacyStatus === 'Waterlogging' ||
+          legacyStatus === 'Flooding'
+        ) {
+          corroboratingUsers++;
+        }
+      }
+      return corroboratingUsers;
+    }
+  } catch (err: any) {
+    console.warn('[Pipeline] Could not query surveys from DB, falling back to memory:', err.message);
+  }
+
+  // Memory fallback
+  const cutoffMs = Date.now() - hoursWindow * 3600 * 1000;
+  const recentSurveys = memoryState.surveys
+    .filter((s) => {
+      if (s.zone_id !== zoneId || s.type !== 'flood') return false;
+      const t = new Date(s.created_at).getTime();
+      return !isNaN(t) && t >= cutoffMs;
+    })
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  const latestByUser = new Map<string, any>();
+  for (const s of recentSurveys) {
+    if (!latestByUser.has(s.user_id)) {
+      latestByUser.set(s.user_id, s.answers);
+    }
+  }
+
+  let corroboratingUsers = 0;
+  for (const answers of latestByUser.values()) {
+    const waterLevel = answers?.water_level;
+    const legacyStatus = answers?.flooding;
+    if (
+      (waterLevel && waterLevel !== 'none') ||
+      legacyStatus === 'Waterlogging' ||
+      legacyStatus === 'Flooding'
+    ) {
+      corroboratingUsers++;
+    }
+  }
+  return corroboratingUsers;
+}
+
+/**
+ * MAIN PIPELINE EXECUTION
+ * Exported async function runPipelineOnce().
+ * The timer and POST /api/pipeline/run both call it.
+ * Evaluates each zone and metric, updates zone_status with ONLY value, level, updated_at,
+ * and maintains the event lifecycle (open on red, keep open on red/yellow, close after 2 green checks).
+ * Isolates failures per zone and metric.
+ */
+export async function runPipelineOnce(): Promise<{
   success: boolean;
   timestamp: string;
   evaluatedZones: number;
   newEventsCreated: number;
+  eventsClosed: number;
   message: string;
 }> {
   if (isPipelineRunning) {
@@ -272,6 +412,7 @@ export async function runMonitoringPipeline(): Promise<{
       timestamp: new Date().toISOString(),
       evaluatedZones: 0,
       newEventsCreated: 0,
+      eventsClosed: 0,
       message: 'Monitoring pipeline is already in progress.',
     };
   }
@@ -279,23 +420,47 @@ export async function runMonitoringPipeline(): Promise<{
   isPipelineRunning = true;
   const now = new Date().toISOString();
   let newEventsCreated = 0;
+  let eventsClosed = 0;
+  let hadDbError = false;
 
   try {
     console.log(`[Pipeline] Starting scheduled evaluation cycle at ${now}...`);
     const zones = await syncZones();
+    await ensureInitialZoneStatus(zones);
 
     for (const zone of zones) {
-      // 1. Fetch live readings
-      const [aqiResult, weatherResult] = await Promise.all([
-        fetchAirQualityFromApi(zone.center_lat, zone.center_lng),
-        fetchWeatherFromApi(zone.center_lat, zone.center_lng),
-      ]);
+      // 1. Fetch live telemetry with isolated catch
+      let aqiResult = { aqi: 125, isFresh: false };
+      let weatherResult = {
+        temperature: 30.5,
+        precipitationProb: 12,
+        rain24hMm: 0.0,
+        isFresh: false,
+      };
 
-      // 2. Count recent community survey evidence for flooding
-      const recentFloodSurveys = getRecentCorroboratingSurveys(zone.zone_id, CENTRAL_THRESHOLDS.flooding.surveyWindowHours);
-      const surveyFloodReportsCount = recentFloodSurveys.length;
+      try {
+        const [a, w] = await Promise.all([
+          fetchAirQualityFromApi(zone.center_lat, zone.center_lng),
+          fetchWeatherFromApi(zone.center_lat, zone.center_lng),
+        ]);
+        aqiResult = a;
+        weatherResult = w;
+      } catch (fetchErr: any) {
+        console.warn(`[Pipeline] Telemetry fetch warning for zone ${zone.zone_id}:`, fetchErr.message);
+      }
 
-      // 3. Deterministic threshold evaluations
+      // 2. Count DISTINCT users reporting flooding in 3-hour window
+      let surveyFloodReportsCount = 0;
+      try {
+        surveyFloodReportsCount = await getDistinctCorroboratingFloodUsersCount(
+          zone.zone_id,
+          CENTRAL_THRESHOLDS.flooding.surveyWindowHours
+        );
+      } catch (surveyErr: any) {
+        console.warn(`[Pipeline] Survey corroboration warning for zone ${zone.zone_id}:`, surveyErr.message);
+      }
+
+      // 3. Plain deterministic threshold evaluation (Decided by plain code, NEVER AI)
       const aqiSeverity = evaluateAqiSeverity(aqiResult.aqi);
       const tempSeverity = evaluateTemperatureSeverity(weatherResult.temperature);
       const floodEval = evaluateFloodingSeverity(
@@ -314,131 +479,360 @@ export async function runMonitoringPipeline(): Promise<{
         { type: 'flooding', level: floodEval.level, value: floodEval.computedRiskPercent },
       ];
 
+      // 4. Evaluate each metric with isolated try/catch (one failure must not stop others)
       for (const metric of metricsToEvaluate) {
-        const key = `${zone.zone_id}:${metric.type}`;
-        const previousStatus = memoryState.zoneStatus[key];
-
-        // 4. Update zone_status (maintaining one current record per zone and metric)
-        const updatedStatusRecord: ZoneStatusRecord = {
-          zone_id: zone.zone_id,
-          type: metric.type,
-          level: metric.level,
-          value: metric.value,
-          updated_at: now,
-        };
-
-        memoryState.zoneStatus[key] = updatedStatusRecord;
-
-        // Try upserting to Supabase
         try {
-          await supabase.from('zone_status').upsert(
-            {
-              zone_id: zone.zone_id,
-              type: metric.type,
-              level: metric.level,
+          const key = `${zone.zone_id}:${metric.type}`;
+
+          // STEP A: Update zone_status with ONLY value, level, updated_at
+          // NEVER upsert whole rows! columns ai_summary, summary_updated_at, survey_count
+          // belong to a database trigger and must never be overwritten or nulled here.
+          const { error: updateStatusErr } = await supabase
+            .from('zone_status')
+            .update({
               value: metric.value,
+              level: metric.level,
               updated_at: now,
-            },
-            { onConflict: 'zone_id,type' }
-          );
-        } catch (dbErr) {
-          // Fallback to memory state
-        }
+            })
+            .eq('zone_id', zone.zone_id)
+            .eq('type', metric.type);
 
-        // 5. Evaluate Dangerous Transition into events
-        // Rule: Insert an event when a metric transitions from safe to a configured dangerous state.
-        // A transition occurs if previous status was 'green' (or null on startup if dangerous)
-        // and current status is 'red' (dangerous).
-        const wasSafe = !previousStatus || previousStatus.level === 'green';
-        const isNowDangerous = metric.level === 'red';
-
-        if (wasSafe && isNowDangerous) {
-          // Check for duplicate recent event to guard against overlapping runs
-          const isDuplicate = memoryState.events.some(
-            (e) =>
-              e.zone_id === zone.zone_id &&
-              e.type === metric.type &&
-              e.status === 'open' &&
-              new Date(now).getTime() - new Date(e.opened_at).getTime() < 30 * 60 * 1000
-          );
-
-          if (!isDuplicate) {
-            const newEvent: EventRecord = {
-              id: crypto.randomUUID(),
-              zone_id: zone.zone_id,
-              type: metric.type,
-              level: 'red',
-              status: 'open',
-              opened_at: now,
-              closed_at: null,
-              last_alert_at: now,
-            };
-
-            // Existing events are immutable: append-only!
-            memoryState.events.push(newEvent);
-            newEventsCreated++;
-
-            try {
-              await supabase.from('events').insert({
-                id: newEvent.id,
-                zone_id: newEvent.zone_id,
-                type: newEvent.type,
-                level: newEvent.level,
-                status: newEvent.status,
-                opened_at: newEvent.opened_at,
-                closed_at: newEvent.closed_at,
-                last_alert_at: newEvent.last_alert_at,
-              });
-            } catch (evErr) {
-              // Maintained in memoryState
-            }
-
-            console.log(`[Pipeline Alert] Dangerous condition detected in ${zone.name} for ${metric.type} (value: ${metric.value})! Created event ${newEvent.id}`);
+          if (updateStatusErr) {
+            console.warn(`[Pipeline DB Warning] Could not update zone_status for ${key}:`, updateStatusErr.message);
+            hadDbError = true;
+            memoryState.lastDbError = updateStatusErr.message;
           }
+
+          // Sync in-memory representation
+          const prevMemory = memoryState.zoneStatus[key];
+          memoryState.zoneStatus[key] = {
+            zone_id: zone.zone_id,
+            type: metric.type,
+            level: metric.level,
+            value: metric.value,
+            updated_at: now,
+            ai_summary: prevMemory?.ai_summary ?? null,
+            summary_updated_at: prevMemory?.summary_updated_at ?? null,
+            survey_count: prevMemory?.survey_count ?? 0,
+          };
+
+          // STEP B: Check for existing OPEN event for this zone and metric
+          let openEvent: EventRecord | null = null;
+
+          try {
+            const { data: eventData, error: eventFetchErr } = await supabase
+              .from('events')
+              .select('*')
+              .eq('zone_id', zone.zone_id)
+              .eq('type', metric.type)
+              .eq('status', 'open')
+              .order('opened_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (!eventFetchErr && eventData) {
+              openEvent = eventData as EventRecord;
+            } else if (eventFetchErr) {
+              console.warn(`[Pipeline] Event fetch warning for ${key}:`, eventFetchErr.message);
+              hadDbError = true;
+            }
+          } catch (e: any) {
+            hadDbError = true;
+          }
+
+          // Fallback to memory if DB query failed
+          if (!openEvent) {
+            const memOpen = memoryState.events.find(
+              (e) => e.zone_id === zone.zone_id && e.type === metric.type && e.status === 'open'
+            );
+            if (memOpen) openEvent = memOpen;
+          }
+
+          // STEP C: LIFECYCLE EVALUATION
+          if (!openEvent) {
+            // No open alert exists. If level is RED, open new alert!
+            if (metric.level === 'red') {
+              const newEvent: EventRecord = {
+                id: crypto.randomUUID(),
+                zone_id: zone.zone_id,
+                type: metric.type,
+                level: 'red',
+                status: 'open',
+                opened_at: now,
+                closed_at: null,
+                last_alert_at: now,
+                green_checks: 0,
+              };
+
+              try {
+                const { error: insertErr } = await supabase.from('events').insert({
+                  id: newEvent.id,
+                  zone_id: newEvent.zone_id,
+                  type: newEvent.type,
+                  level: 'red',
+                  status: 'open',
+                  opened_at: newEvent.opened_at,
+                  closed_at: null,
+                  last_alert_at: newEvent.last_alert_at,
+                  green_checks: 0,
+                });
+
+                if (insertErr) {
+                  // If insert fails with unique-violation (code 23505), another run already opened it; ignore!
+                  if (insertErr.code === '23505' || insertErr.message?.includes('duplicate key')) {
+                    console.log(`[Pipeline] Alert already open for ${key} (code 23505).`);
+                  } else {
+                    console.warn(`[Pipeline] Insert event error for ${key}:`, insertErr.message);
+                    hadDbError = true;
+                    memoryState.lastDbError = insertErr.message;
+                  }
+                } else {
+                  // Successful insert: notify residents stub
+                  console.log(`[Pipeline Alert] Opened new RED event for ${zone.name} - ${metric.type}`);
+                  newEventsCreated++;
+                  memoryState.events.push(newEvent);
+
+                  // Call notifyResidents(event) once when event is first opened
+                  try {
+                    await notifyResidents(newEvent);
+                  } catch (notifyErr) {
+                    console.error('[Pipeline Notify Warning]', notifyErr);
+                  }
+                }
+              } catch (insErr: any) {
+                console.warn(`[Pipeline] Insert event exception:`, insErr.message);
+              }
+            }
+          } else {
+            // An open event exists!
+            if (metric.level === 'red' || metric.level === 'yellow') {
+              // Metric is still red or yellow: keep the alert open.
+              // Reset green_checks = 0 and update last_alert_at.
+              try {
+                const { error: keepOpenErr } = await supabase
+                  .from('events')
+                  .update({
+                    green_checks: 0,
+                    last_alert_at: now,
+                  })
+                  .eq('id', openEvent.id);
+
+                if (keepOpenErr) hadDbError = true;
+              } catch (e) {
+                hadDbError = true;
+              }
+
+              // Update memory
+              openEvent.green_checks = 0;
+              openEvent.last_alert_at = now;
+            } else if (metric.level === 'green') {
+              // Metric is green!
+              const currentChecks = (openEvent.green_checks ?? 0) + 1;
+
+              if (currentChecks < 2) {
+                // First green check: increment green_checks, keep alert open
+                try {
+                  const { error: incErr } = await supabase
+                    .from('events')
+                    .update({
+                      green_checks: currentChecks,
+                    })
+                    .eq('id', openEvent.id);
+
+                  if (incErr) hadDbError = true;
+                } catch (e) {
+                  hadDbError = true;
+                }
+                openEvent.green_checks = currentChecks;
+              } else {
+                // TWO CONSECUTIVE GREEN CHECKS: Close the alert!
+                // status = 'closed', closed_at = now()
+                // Alerts are closed, never deleted.
+                try {
+                  const { error: closeErr } = await supabase
+                    .from('events')
+                    .update({
+                      status: 'closed',
+                      closed_at: now,
+                      green_checks: currentChecks,
+                    })
+                    .eq('id', openEvent.id);
+
+                  if (closeErr) hadDbError = true;
+                } catch (e) {
+                  hadDbError = true;
+                }
+
+                openEvent.status = 'closed';
+                openEvent.closed_at = now;
+                openEvent.green_checks = currentChecks;
+                eventsClosed++;
+
+                // IN THE SAME FUNCTION: reset that zone_status row
+                // ai_summary = null, summary_updated_at = null, survey_count = 0, level = 'green'
+                try {
+                  const { error: resetErr } = await supabase
+                    .from('zone_status')
+                    .update({
+                      ai_summary: null,
+                      summary_updated_at: null,
+                      survey_count: 0,
+                      level: 'green',
+                    })
+                    .eq('zone_id', zone.zone_id)
+                    .eq('type', metric.type);
+
+                  if (resetErr) hadDbError = true;
+                } catch (e) {
+                  hadDbError = true;
+                }
+
+                // Reset in memory as well
+                if (memoryState.zoneStatus[key]) {
+                  memoryState.zoneStatus[key].ai_summary = null;
+                  memoryState.zoneStatus[key].summary_updated_at = null;
+                  memoryState.zoneStatus[key].survey_count = 0;
+                  memoryState.zoneStatus[key].level = 'green';
+                }
+
+                console.log(`[Pipeline] Closed alert ${openEvent.id} for ${zone.name} - ${metric.type} after 2 green checks. Reset zone summary.`);
+              }
+            }
+          }
+        } catch (metricErr: any) {
+          console.error(`[Pipeline Error] Evaluation failure for ${zone.zone_id} metric ${metric.type}:`, metricErr.message);
         }
       }
     }
 
     memoryState.lastRunAt = now;
     memoryState.runCount += 1;
+    memoryState.isUsingCachedData = hadDbError;
+    if (!hadDbError) {
+      memoryState.lastDbError = null;
+    }
     saveState(memoryState);
 
-    console.log(`[Pipeline] Completed evaluation cycle: ${zones.length} zones checked, ${newEventsCreated} new dangerous events recorded.`);
+    console.log(
+      `[Pipeline] Finished cycle at ${now}. Evaluated ${zones.length} zones. New alerts: ${newEventsCreated}, Closed alerts: ${eventsClosed}.`
+    );
 
     return {
       success: true,
       timestamp: now,
       evaluatedZones: zones.length,
       newEventsCreated,
-      message: `Successfully evaluated ${zones.length} zones.`,
+      eventsClosed,
+      message: `Evaluated ${zones.length} zones.`,
     };
   } catch (err: any) {
-    console.error('[Pipeline] Error running pipeline:', err);
+    console.error('[Pipeline Critical Failure]', err);
+    memoryState.lastDbError = err.message;
+    memoryState.isUsingCachedData = true;
+    saveState(memoryState);
     return {
       success: false,
       timestamp: now,
       evaluatedZones: 0,
       newEventsCreated: 0,
-      message: err.message || 'Unknown error occurred.',
+      eventsClosed: 0,
+      message: err.message || 'Pipeline evaluation encountered an error.',
     };
   } finally {
     isPipelineRunning = false;
   }
 }
 
+// Backward-compatibility alias
+export const runMonitoringPipeline = runPipelineOnce;
+
 /**
  * Accessors for API routes
  */
+export async function getZonesFromDb(): Promise<ZoneRecord[]> {
+  try {
+    const { data, error } = await supabase.from('zones').select('*');
+    if (!error && data && data.length > 0) {
+      memoryState.zones = data as ZoneRecord[];
+      memoryState.isUsingCachedData = false;
+      return data as ZoneRecord[];
+    }
+  } catch (e: any) {
+    memoryState.isUsingCachedData = true;
+  }
+  return memoryState.zones.length > 0 ? memoryState.zones : DEFAULT_ZONES;
+}
+
 export function getZones(): ZoneRecord[] {
   return memoryState.zones.length > 0 ? memoryState.zones : DEFAULT_ZONES;
+}
+
+export async function getZoneStatusListFromDb(): Promise<{
+  statusList: ZoneStatusRecord[];
+  isCached: boolean;
+}> {
+  try {
+    const { data, error } = await supabase.from('zone_status').select('*');
+    if (!error && data && data.length > 0) {
+      // Update memory cache
+      for (const item of data) {
+        const key = `${item.zone_id}:${item.type}`;
+        memoryState.zoneStatus[key] = item as ZoneStatusRecord;
+      }
+      memoryState.isUsingCachedData = false;
+      return { statusList: data as ZoneStatusRecord[], isCached: false };
+    }
+    if (error) {
+      memoryState.lastDbError = error.message;
+      memoryState.isUsingCachedData = true;
+    }
+  } catch (err: any) {
+    memoryState.lastDbError = err.message;
+    memoryState.isUsingCachedData = true;
+  }
+
+  // Fallback to local memory cache
+  return {
+    statusList: Object.values(memoryState.zoneStatus),
+    isCached: true,
+  };
 }
 
 export function getZoneStatus(): ZoneStatusRecord[] {
   return Object.values(memoryState.zoneStatus);
 }
 
+export async function getEventsFromDb(): Promise<{
+  events: EventRecord[];
+  isCached: boolean;
+}> {
+  try {
+    const { data, error } = await supabase
+      .from('events')
+      .select('*')
+      .order('opened_at', { ascending: false });
+
+    if (!error && data) {
+      memoryState.events = data as EventRecord[];
+      memoryState.isUsingCachedData = false;
+      return { events: data as EventRecord[], isCached: false };
+    }
+    if (error) {
+      memoryState.lastDbError = error.message;
+      memoryState.isUsingCachedData = true;
+    }
+  } catch (err: any) {
+    memoryState.lastDbError = err.message;
+    memoryState.isUsingCachedData = true;
+  }
+
+  return {
+    events: [...memoryState.events].reverse(),
+    isCached: true,
+  };
+}
+
 export function getEvents(): EventRecord[] {
-  // Return immutable list, newest first
   return [...memoryState.events].reverse();
 }
 
@@ -446,57 +840,26 @@ export function getSurveys(): SurveyRecord[] {
   return memoryState.surveys;
 }
 
-export async function addSurvey(submission: {
-  userId?: string;
-  zoneId: string;
-  type: 'air' | 'flood';
-  answers: Record<string, any>;
-}): Promise<{ success: boolean; survey: SurveyRecord; error?: string }> {
-  // Anti-spam / duplicate prevention (same user or ip, same zone & type within 1 minute)
-  const oneMinuteAgo = Date.now() - 60 * 1000;
-  const recentDuplicate = memoryState.surveys.find(
-    (s) =>
-      s.zone_id === submission.zoneId &&
-      s.type === submission.type &&
-      s.user_id === (submission.userId || 'anonymous-user') &&
-      new Date(s.created_at).getTime() > oneMinuteAgo
-  );
+/**
+ * Server-side rate limit tracking for survey submissions:
+ * Key: `${user_id}:${type}` -> timestamp ms
+ */
+const surveyRateLimits = new Map<string, number>();
 
-  if (recentDuplicate) {
-    return {
-      success: false,
-      survey: recentDuplicate,
-      error: 'You have submitted a report for this area recently. Please wait a minute before submitting again.',
-    };
+export function checkSurveyRateLimit(userId: string, type: string): boolean {
+  const key = `${userId}:${type}`;
+  const lastTime = surveyRateLimits.get(key);
+  const now = Date.now();
+  if (lastTime && now - lastTime < 10 * 60 * 1000) {
+    // Within 10 minutes: rate limited!
+    return false;
   }
+  return true;
+}
 
-  const newSurvey: SurveyRecord = {
-    id: crypto.randomUUID(),
-    user_id: submission.userId || '00000000-0000-0000-0000-000000000000',
-    zone_id: submission.zoneId,
-    type: submission.type,
-    answers: submission.answers,
-    created_at: new Date().toISOString(),
-  };
-
-  memoryState.surveys.push(newSurvey);
-  saveState(memoryState);
-
-  // Attempt to write to Supabase
-  try {
-    await supabase.from('surveys').insert({
-      id: newSurvey.id,
-      user_id: newSurvey.user_id,
-      zone_id: newSurvey.zone_id,
-      type: newSurvey.type,
-      answers: newSurvey.answers,
-      created_at: newSurvey.created_at,
-    });
-  } catch (err) {
-    // Saved in memoryState
-  }
-
-  return { success: true, survey: newSurvey };
+export function recordSurveyRateLimit(userId: string, type: string): void {
+  const key = `${userId}:${type}`;
+  surveyRateLimits.set(key, Date.now());
 }
 
 export function getPipelineStatus(): {
@@ -504,11 +867,15 @@ export function getPipelineStatus(): {
   lastRunAt: string | null;
   runCount: number;
   intervalMinutes: number;
+  lastDbError: string | null;
+  isUsingCachedData: boolean;
 } {
   return {
     isPipelineRunning,
     lastRunAt: memoryState.lastRunAt,
     runCount: memoryState.runCount,
     intervalMinutes: CENTRAL_THRESHOLDS.monitoring.defaultIntervalMinutes,
+    lastDbError: memoryState.lastDbError,
+    isUsingCachedData: memoryState.isUsingCachedData,
   };
 }
